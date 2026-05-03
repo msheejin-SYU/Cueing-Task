@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Mobile Posner Cueing Task</title>
+<style>
+  :root { --bg:#0b1020; --fg:#f5f7ff; --muted:#b8c0d9; --accent:#4dd0e1; --box:#1b2445; --cue:#ffd54f; --target:#ff7043; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .wrap { min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:18px; gap:18px; }
+  h1 { margin:0; font-size:1.55rem; text-align:center; }
+  p { line-height:1.55; max-width:760px; margin:0; color:var(--muted); }
+  button { border:0; border-radius:16px; padding:14px 20px; font-size:1.05rem; font-weight:700; background:var(--accent); color:#001018; cursor:pointer; }
+  .secondary { background:#26345f; color:var(--fg); }
+  .screen { width:min(920px, 100%); min-height:520px; border:2px solid #39466e; border-radius:24px; position:relative; overflow:hidden; background:#101735; }
+  .fix { position:absolute; left:50%; top:45%; transform:translate(-50%,-50%); font-size:2.4rem; color:#ffffff; }
+  .box { position:absolute; width:28%; height:32%; top:29%; border:4px solid #7b86ad; border-radius:20px; display:flex; align-items:center; justify-content:center; font-size:4rem; font-weight:900; }
+  .leftBox { left:8%; } .rightBox { right:8%; }
+  .cue { border-color:var(--cue); box-shadow:0 0 28px rgba(255,213,79,.65); }
+  .target { color:var(--target); }
+  .tapbar { width:min(920px, 100%); display:flex; gap:12px; }
+  .tapbar button { flex:1; min-height:72px; font-size:1.25rem; }
+  .status { width:min(920px, 100%); display:flex; justify-content:space-between; gap:8px; color:var(--muted); font-size:.95rem; }
+  .hide { display:none !important; }
+  table { border-collapse:collapse; margin-top:12px; width:min(760px, 100%); background:#111a3a; border-radius:12px; overflow:hidden; }
+  th, td { padding:10px 12px; border-bottom:1px solid #2b3763; text-align:center; }
+  th { color:#dce3ff; }
+  .note { font-size:.9rem; color:#aab4d6; }
+  @media (max-width:620px){
+    .screen { min-height:420px; }
+    .box { width:32%; height:30%; top:31%; font-size:3.3rem; }
+    .leftBox { left:5%; } .rightBox { right:5%; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap" id="intro">
+  <h1>휴대폰용 Posner Cueing Task</h1>
+  <p>
+    가운데 <b>+</b>를 응시하세요. 노란 테두리는 단서(cue)입니다. 이후 별표(<b>*</b>)가 왼쪽 또는 오른쪽 상자에 나타납니다.
+    별표가 나타난 위치에 따라 아래 <b>왼쪽 / 오른쪽</b> 버튼을 최대한 빠르고 정확하게 누르세요.
+  </p>
+  <p class="note">
+    수업 시연용입니다. 휴대폰 브라우저에서는 반응시간이 연구용 장비만큼 정밀하지 않을 수 있습니다.
+  </p>
+  <button id="startBtn">시작하기</button>
+</div>
+
+<div class="wrap hide" id="task">
+  <div class="status">
+    <span id="trialInfo">Trial</span>
+    <span>정확도와 반응시간을 기록합니다</span>
+  </div>
+  <div class="screen">
+    <div class="fix" id="fix">+</div>
+    <div class="box leftBox" id="leftBox"></div>
+    <div class="box rightBox" id="rightBox"></div>
+  </div>
+  <div class="tapbar">
+    <button id="leftBtn">왼쪽</button>
+    <button id="rightBtn">오른쪽</button>
+  </div>
+</div>
+
+<div class="wrap hide" id="result">
+  <h1>결과</h1>
+  <p id="summary"></p>
+  <table>
+    <thead><tr><th>조건</th><th>정답 수</th><th>평균 반응시간</th></tr></thead>
+    <tbody>
+      <tr><td>Valid cue</td><td id="validN"></td><td id="validRT"></td></tr>
+      <tr><td>Invalid cue</td><td id="invalidN"></td><td id="invalidRT"></td></tr>
+    </tbody>
+  </table>
+  <p class="note">
+    일반적으로 valid cue에서는 주의가 목표 위치로 미리 이동하므로 반응이 빠르고,
+    invalid cue에서는 주의를 반대쪽으로 재이동해야 하므로 반응이 느려집니다.
+  </p>
+  <button id="restartBtn">다시 하기</button>
+</div>
+
+<script>
+const N = 40;                 // 수업용: 40회. 필요하면 100으로 변경 가능
+const VALID_RATIO = 0.75;     // valid cue 75%
+const FIX_MS = 600;
+const CUE_MS = 250;
+const GAP_MS = 250;
+const MAX_RESP_MS = 2000;
+
+let trials = [];
+let idx = 0;
+let accepting = false;
+let targetSide = null;
+let targetOnset = 0;
+let timeoutId = null;
+let data = [];
+
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function makeTrials(){
+  const arr = [];
+  for(let i=0;i<N;i++){
+    const target = Math.random() < 0.5 ? "left" : "right";
+    const valid = Math.random() < VALID_RATIO;
+    const cue = valid ? target : (target === "left" ? "right" : "left");
+    arr.push({target, cue, valid});
+  }
+  return arr.sort(() => Math.random() - 0.5);
+}
+
+function clearBoxes(){
+  $("leftBox").className = "box leftBox";
+  $("rightBox").className = "box rightBox";
+  $("leftBox").textContent = "";
+  $("rightBox").textContent = "";
+}
+
+async function runTrial(){
+  if(idx >= trials.length){ return finish(); }
+  clearBoxes();
+  $("fix").textContent = "+";
+  $("trialInfo").textContent = `Trial ${idx+1} / ${trials.length}`;
+  const t = trials[idx];
+
+  await sleep(FIX_MS);
+
+  const cueBox = t.cue === "left" ? $("leftBox") : $("rightBox");
+  cueBox.classList.add("cue");
+  await sleep(CUE_MS);
+
+  clearBoxes();
+  await sleep(GAP_MS);
+
+  targetSide = t.target;
+  const targetBox = targetSide === "left" ? $("leftBox") : $("rightBox");
+  targetBox.textContent = "*";
+  targetBox.classList.add("target");
+  targetOnset = performance.now();
+  accepting = true;
+
+  timeoutId = setTimeout(() => record("none"), MAX_RESP_MS);
+}
+
+function record(resp){
+  if(!accepting) return;
+  accepting = false;
+  clearTimeout(timeoutId);
+  const rt = resp === "none" ? null : Math.round(performance.now() - targetOnset);
+  const t = trials[idx];
+  data.push({
+    trial: idx+1, cue: t.cue, target: t.target, valid: t.valid,
+    response: resp, correct: resp === t.target, rt
+  });
+  idx++;
+  clearBoxes();
+  setTimeout(runTrial, 350);
+}
+
+function meanRT(valid){
+  const xs = data.filter(d => d.valid === valid && d.correct && d.rt !== null).map(d => d.rt);
+  if(xs.length === 0) return {n:0, mean:null};
+  return {n:xs.length, mean: Math.round(xs.reduce((a,b)=>a+b,0)/xs.length)};
+}
+
+function finish(){
+  $("task").classList.add("hide");
+  $("result").classList.remove("hide");
+  const v = meanRT(true), iv = meanRT(false);
+  $("validN").textContent = v.n;
+  $("invalidN").textContent = iv.n;
+  $("validRT").textContent = v.mean === null ? "-" : `${v.mean} ms`;
+  $("invalidRT").textContent = iv.mean === null ? "-" : `${iv.mean} ms`;
+  const acc = Math.round(100 * data.filter(d=>d.correct).length / data.length);
+  const effect = (v.mean !== null && iv.mean !== null) ? (iv.mean - v.mean) : null;
+  $("summary").innerHTML = `정확도: <b>${acc}%</b><br>` +
+    (effect === null ? "" : `Cueing effect = Invalid RT − Valid RT = <b>${effect} ms</b>`);
+}
+
+function start(){
+  trials = makeTrials();
+  idx = 0; data = [];
+  $("intro").classList.add("hide");
+  $("result").classList.add("hide");
+  $("task").classList.remove("hide");
+  runTrial();
+}
+
+$("startBtn").onclick = start;
+$("restartBtn").onclick = start;
+$("leftBtn").onclick = () => record("left");
+$("rightBtn").onclick = () => record("right");
+document.addEventListener("keydown", e => {
+  if(e.key === "a" || e.key === "A" || e.key === "ArrowLeft") record("left");
+  if(e.key === "l" || e.key === "L" || e.key === "ArrowRight") record("right");
+});
+</script>
+</body>
+</html>
