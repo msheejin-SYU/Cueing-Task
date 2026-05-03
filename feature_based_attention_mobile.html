@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Feature-based Attention Task</title>
+<style>
+body{margin:0;background:#0b1020;color:#f7f8ff;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:18px;gap:16px}
+h1{font-size:1.45rem;text-align:center;margin:0} h2{font-size:1.2rem;color:#ffd54f;text-align:center;margin:0}
+p{max-width:780px;line-height:1.55;margin:0;color:#b8c0d9} b{color:white}
+button{border:0;border-radius:16px;padding:14px 18px;font-size:1.05rem;font-weight:800;background:#4dd0e1;color:#001018}
+.hide{display:none!important}
+.status{width:min(920px,100%);display:flex;justify-content:space-between;color:#b8c0d9;font-size:.95rem}
+.screen{width:min(920px,100%);min-height:460px;border:2px solid #38466f;border-radius:24px;background:#101735;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;gap:16px}
+.cue{font-size:1.25rem;font-weight:900;color:#ffd54f;text-align:center;min-height:32px}
+.fix{font-size:2.7rem;font-weight:900;height:70px;display:flex;align-items:center}
+.stimrow{display:flex;width:100%;justify-content:space-around;align-items:center;gap:18px}
+.stimbox{width:38%;height:225px;border:2px solid #2f3d66;border-radius:22px;display:flex;align-items:center;justify-content:center;background:#0d1430;overflow:hidden;position:relative}
+.shape{width:86px;height:86px;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
+.circle{border-radius:50%}.square{border-radius:10px}.diamond{transform:translate(-50%,-50%) rotate(45deg);border-radius:8px}
+.triangle{width:0;height:0;background:transparent!important;border-left:52px solid transparent;border-right:52px solid transparent;border-bottom:96px solid currentColor}
+.moving.slow{animation:move 1.35s linear infinite alternate}.moving.fast{animation:move .55s linear infinite alternate}
+@keyframes move{from{left:28%}to{left:72%}}
+.tapbar{width:min(920px,100%);display:flex;gap:12px}.tapbar button{flex:1;min-height:72px;font-size:1.25rem}
+table{border-collapse:collapse;margin-top:10px;width:min(820px,100%);background:#111a3a;border-radius:12px;overflow:hidden}
+th,td{padding:10px 12px;border-bottom:1px solid #2b3763;text-align:center} th{color:#dce3ff}
+.note{font-size:.9rem;color:#aab4d6}
+@media(max-width:620px){.screen{min-height:400px}.stimbox{width:44%;height:180px}.shape{width:70px;height:70px}.triangle{border-left-width:42px;border-right-width:42px;border-bottom-width:78px}}
+</style>
+</head>
+<body>
+<div class="wrap" id="intro">
+<h1>Feature-based Attention Task</h1>
+<p>두 자극이 <b>같은지/다른지</b> 판단하는 수업용 실험입니다. 매 블록마다 판단해야 할 특징이 달라집니다.</p>
+<p><b>색상</b> 블록에서는 색만, <b>모양</b> 블록에서는 모양만, <b>속도</b> 블록에서는 움직임 속도만 판단합니다. 다른 특징은 무시하세요.</p>
+<p class="note">휴대폰 브라우저용 시연입니다. 연구용 반응시간 측정보다는 개념 체험에 적합합니다.</p>
+<button id="startBtn">시작하기</button>
+</div>
+
+<div class="wrap hide" id="blockIntro">
+<h2 id="blockTitle"></h2>
+<p id="blockRule" style="text-align:center"></p>
+<button id="blockStartBtn">이 블록 시작</button>
+</div>
+
+<div class="wrap hide" id="task">
+<div class="status"><span id="trialInfo"></span><span id="blockInfo"></span></div>
+<div class="screen">
+<div class="cue" id="cueText"></div><div class="fix" id="fix">+</div>
+<div class="stimrow hide" id="stimrow"><div class="stimbox"><div id="leftStim" class="shape"></div></div><div class="stimbox"><div id="rightStim" class="shape"></div></div></div>
+</div>
+<div class="tapbar"><button id="sameBtn">같다</button><button id="diffBtn">다르다</button></div>
+</div>
+
+<div class="wrap hide" id="result">
+<h1>결과</h1><p id="summary" style="text-align:center"></p>
+<table><thead><tr><th>주의 특징</th><th>정답 수</th><th>정확도</th><th>평균 반응시간</th></tr></thead><tbody id="resultBody"></tbody></table>
+<p class="note">해석: 같은 시각 자극이라도 “무엇에 주의를 기울이라고 지시받는가”에 따라 처리 전략과 반응시간이 달라질 수 있습니다.</p>
+<button id="restartBtn">다시 하기</button>
+</div>
+
+<script>
+const BLOCKS=[{key:"color",label:"색상",rule:"색만 보고 두 자극이 같은지/다른지 판단하세요. 모양과 속도는 무시합니다."},{key:"shape",label:"모양",rule:"모양만 보고 두 자극이 같은지/다른지 판단하세요. 색과 속도는 무시합니다."},{key:"speed",label:"속도",rule:"움직임 속도만 보고 두 자극이 같은지/다른지 판단하세요. 색과 모양은 무시합니다."}];
+const TRIALS_PER_BLOCK=16,FIX_MS=500,STIM_MAX_MS=2500;
+const colors=[{name:"red",value:"#ef5350"},{name:"blue",value:"#42a5f5"},{name:"yellow",value:"#ffca28"},{name:"green",value:"#66bb6a"}];
+const shapes=["circle","square","triangle","diamond"],speeds=["slow","fast"];
+let blockIndex=0,trialIndex=0,trials=[],data=[],accepting=false,onset=0,timeoutId=null,currentTrial=null;
+const $=id=>document.getElementById(id); const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const pick=arr=>arr[Math.floor(Math.random()*arr.length)]; const shuffle=arr=>arr.sort(()=>Math.random()-0.5);
+function diffVal(arr,current){let x=pick(arr);while((typeof x==="object"?x.name:x)===(typeof current==="object"?current.name:current)){x=pick(arr)}return x}
+function makeStim(){return{color:pick(colors),shape:pick(shapes),speed:pick(speeds)}}
+function makeTrial(feature){let left=makeStim(),right={...left};const same=Math.random()<0.5;if(!same){if(feature==="color")right.color=diffVal(colors,left.color);if(feature==="shape")right.shape=diffVal(shapes,left.shape);if(feature==="speed")right.speed=diffVal(speeds,left.speed)}
+["color","shape","speed"].forEach(f=>{if(f!==feature&&Math.random()<0.65){if(f==="color")right.color=diffVal(colors,left.color);if(f==="shape")right.shape=diffVal(shapes,left.shape);if(f==="speed")right.speed=diffVal(speeds,left.speed)}});return{feature,left,right,correct:same?"same":"diff"}}
+function makeBlockTrials(feature){let arr=[];for(let i=0;i<TRIALS_PER_BLOCK;i++)arr.push(makeTrial(feature));return shuffle(arr)}
+function showStim(el,stim){el.className="shape";el.style.background="transparent";el.style.color=stim.color.value;if(stim.shape==="triangle"){el.classList.add("triangle","moving",stim.speed);el.style.borderBottomColor=stim.color.value}else{el.classList.add(stim.shape,"moving",stim.speed);el.style.background=stim.color.value}}
+function clearStim(){$("stimrow").classList.add("hide");["leftStim","rightStim"].forEach(id=>{let e=$(id);e.className="shape";e.style.background="transparent";e.style.borderBottomColor=""})}
+function start(){blockIndex=0;trialIndex=0;data=[];$("intro").classList.add("hide");showBlockIntro()}
+function showBlockIntro(){let b=BLOCKS[blockIndex];$("task").classList.add("hide");$("result").classList.add("hide");$("blockIntro").classList.remove("hide");$("blockTitle").textContent=`블록 ${blockIndex+1}: ${b.label} 판단`;$("blockRule").textContent=b.rule}
+function startBlock(){trials=makeBlockTrials(BLOCKS[blockIndex].key);trialIndex=0;$("blockIntro").classList.add("hide");$("task").classList.remove("hide");runTrial()}
+async function runTrial(){if(trialIndex>=trials.length){blockIndex++;if(blockIndex>=BLOCKS.length)return finish();return showBlockIntro()}currentTrial=trials[trialIndex];clearStim();$("fix").textContent="+";$("cueText").textContent=`${BLOCKS[blockIndex].label}만 판단`;$("trialInfo").textContent=`Trial ${trialIndex+1} / ${TRIALS_PER_BLOCK}`;$("blockInfo").textContent=`Block ${blockIndex+1} / ${BLOCKS.length}`;await sleep(FIX_MS);$("fix").textContent="";showStim($("leftStim"),currentTrial.left);showStim($("rightStim"),currentTrial.right);$("stimrow").classList.remove("hide");onset=performance.now();accepting=true;timeoutId=setTimeout(()=>record("none"),STIM_MAX_MS)}
+function record(resp){if(!accepting)return;accepting=false;clearTimeout(timeoutId);let rt=resp==="none"?null:Math.round(performance.now()-onset);data.push({block:BLOCKS[blockIndex].label,correctAnswer:currentTrial.correct,response:resp,correct:resp===currentTrial.correct,rt});trialIndex++;clearStim();$("fix").textContent="+";setTimeout(runTrial,300)}
+function summarize(label){let xs=data.filter(d=>d.block===label),corrects=xs.filter(d=>d.correct),rts=corrects.filter(d=>d.rt!==null).map(d=>d.rt),mean=rts.length?Math.round(rts.reduce((a,b)=>a+b,0)/rts.length):null;return{n:corrects.length,total:xs.length,acc:xs.length?Math.round(100*corrects.length/xs.length):0,rt:mean}}
+function finish(){$("task").classList.add("hide");$("result").classList.remove("hide");let body=$("resultBody");body.innerHTML="";let totalAcc=Math.round(100*data.filter(d=>d.correct).length/data.length);BLOCKS.forEach(b=>{let s=summarize(b.label),tr=document.createElement("tr");tr.innerHTML=`<td>${b.label}</td><td>${s.n} / ${s.total}</td><td>${s.acc}%</td><td>${s.rt===null?"-":s.rt+" ms"}</td>`;body.appendChild(tr)});$("summary").innerHTML=`전체 정확도: <b>${totalAcc}%</b><br>각 블록에서 선택적 주의가 어떻게 달라졌는지 비교해보세요.`}
+$("startBtn").onclick=start;$("blockStartBtn").onclick=startBlock;$("restartBtn").onclick=start;$("sameBtn").onclick=()=>record("same");$("diffBtn").onclick=()=>record("diff");
+document.addEventListener("keydown",e=>{if(e.key==="a"||e.key==="A"||e.key==="ArrowLeft")record("same");if(e.key==="l"||e.key==="L"||e.key==="ArrowRight")record("diff")});
+</script>
+</body></html>
